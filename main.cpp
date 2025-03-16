@@ -9,6 +9,9 @@
 #include <iphlpapi.h>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
+#include <stdint.h>
+#include <ctime>
 
 #pragma comment(lib, "Ws2_32.lib")
 #define DEFAULT_PORT "27015"
@@ -95,7 +98,7 @@ class Client {
 				}
 				sendbuf += iResult;
 				buflen -= iResult;
-				printf("Bytes Sent: %ld\n", iResult);
+				//printf("Bytes Sent: %ld\n", iResult);
 				if (receiveACK() == 1) {
 					closesocket(ConnectSocket);
 					WSACleanup();
@@ -111,9 +114,9 @@ class Client {
 			// Receive data until the server closes the connection
 			
 				iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
-				if (iResult > 0)
-					printf("Bytes Received: %d\n", iResult);
-				else if (iResult == 0) {
+				if (iResult > 0){
+					//printf("Bytes Received: %d\n", iResult);
+				}else if (iResult == 0) {
 					printf("Connection closed\n");
 					return 0;
 				}
@@ -130,9 +133,9 @@ class Client {
 			// Receive data until the server closes the connection
 
 			iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
-			if (iResult > 0)
-				printf("ACK Received: %d\n", iResult);
-			else if (iResult == 0) {
+			if (iResult > 0) {
+				//printf("ACK Received: %d\n", iResult);
+			}else if (iResult == 0) {
 				printf("Connection closed\n");
 				return 0;
 			}
@@ -145,7 +148,7 @@ class Client {
 		}
 		
 		int sendLong(long value) {
-			std::cout << "sending long\n";
+			//std::cout << "sending long\n";
 			value = htonl(value);
 			if (sendData(&value, sizeof(value)) == 1) {
 				printf("sending long failed\n");
@@ -170,7 +173,7 @@ class Client {
 				sendbuf[i] = fileName[i];
 			}
 			//  send file name length
-			sendbuf[fileName.size() + 1] = (const char)"\0";
+			sendbuf[fileName.size() + 1] = '\0';
 			if (sendLong(fileName.size() + 1) == 1) {
 				return 1;
 			}
@@ -178,8 +181,8 @@ class Client {
 			if (sendData(sendbuf, fileName.size()+1) == 1) {
 				return 1;
 			}
-			u_int64 fileSize = getFileSize(filePath);
-			std::cout << "file size is: " << fileSize << "\n";
+			uint64_t fileSize = getFileSize(filePath);
+			//std::cout << "file size is: " << fileSize << "\n";
 			if (sendData(&fileSize, 8) == 1) {
 				printf("failed to send file sizez\n");
 				return 1;
@@ -352,7 +355,7 @@ class Server {
 					WSACleanup();
 					return 1;
 				}
-				std::cout << "Received " << buflen << " Bytes\n";
+				//std::cout << "Received " << buflen << " Bytes\n";
 				if (sendACK() == 1) {
 					return 1;
 				}
@@ -371,16 +374,17 @@ class Server {
 			return 0;
 		}
 		int readFile() {
+			//time_t start = time(NULL);
 			long fileNameSize{};
 			char* receivebuf = new char[DEFAULT_BUFLEN];
-			u_int64 fileSize{};
+			uint64_t fileSize{};
 
 			// receive length of file name
 			if (readLong(&fileNameSize) == 1) {
 				return 1;
 			}
 			// receive file name
-			std::cout << "File name size is: " << fileNameSize << "\n";
+			//std::cout << "File name size is: " << fileNameSize << "\n";
 			if (readData(receivebuf, fileNameSize) == 1) {
 				return 1;
 			}
@@ -391,7 +395,7 @@ class Server {
 			
 			// create file name string
 			std::string fileName(receivebuf, fileNameSize - 1);
-			std::cout << "File name: " << fileName << "\n";
+			//std::cout << "File name: " << fileName << "\n";
 			
 			std::fstream fp(fileName.c_str(), std::ios::out | std::ios::binary);
 			if (!fp) {
@@ -399,14 +403,18 @@ class Server {
 				return 1;
 			}
 			while (fileSize > 0) {
-				u_int64 min = min(fileSize, MAX_BUFFER);
-				if (readData(receivebuf, min) == 1) {
+
+				uint64_t bufSize = std::min<uint64_t>(fileSize, (uint64_t)MAX_BUFFER);
+				
+				if (readData(receivebuf, bufSize) == 1) {
 					return 1;
 				}
-				fileSize -= min;
-				fp.write(receivebuf, min);
+				fileSize -= bufSize;
+				fp.write(receivebuf, bufSize);
 			}
-			
+			std::cout << "File Download Complete\n";
+			//time_t taken = time(NULL) - start;
+			//std::cout << "time taken: " << taken << std::endl;
 
 			fp.close();
 			delete[] receivebuf;
