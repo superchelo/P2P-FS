@@ -7,11 +7,14 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
-
+#include <fstream>
+#include <filesystem>
 
 #pragma comment(lib, "Ws2_32.lib")
 #define DEFAULT_PORT "27015"
-#define DEFAULT_BUFLEN 512
+#define DEFAULT_BUFLEN 1024
+#define MAX_BUFFER 1024
+
 
 
 class Client {
@@ -78,43 +81,38 @@ class Client {
 			printf("Socket Disconnected\n");
 			return 0;
 		}
-		int sendData() {
+		int sendData(void* buf, int buflen) {
 
-			std::string input;
-			std::cout << "Enter a Message: ";
-			std::cin >> input;
-			const char* sendbuf = input.c_str();
-
-			// Send an initial buffer
-			int iResult = send(ConnectSocket, sendbuf, (int)strlen(sendbuf), 0);
-			if (iResult == SOCKET_ERROR) {
-				printf("send failed: %d\n", WSAGetLastError());
-				closesocket(ConnectSocket);
-				WSACleanup();
-				return 1;
+			const char* sendbuf = (const char *)buf;
+			
+			while (buflen > 0) {
+				int iResult = send(ConnectSocket, sendbuf, buflen, 0);
+				if (iResult == SOCKET_ERROR) {
+					printf("send failed: %d\n", WSAGetLastError());
+					closesocket(ConnectSocket);
+					WSACleanup();
+					return 1;
+				}
+				sendbuf += iResult;
+				buflen -= iResult;
+				printf("Bytes Sent: %ld\n", iResult);
+				if (receiveACK() == 1) {
+					closesocket(ConnectSocket);
+					WSACleanup();
+					return 1;
+				}
 			}
 
-			printf("Bytes Sent: %ld\n", iResult);
-
-			// shutdown the connection for sending since no more data will be sent
-			// the client can still use the ConnectSocket for receiving data
-			iResult = shutdown(ConnectSocket, SD_SEND);
-			if (iResult == SOCKET_ERROR) {
-				printf("shutdown failed: %d\n", WSAGetLastError());
-				closesocket(ConnectSocket);
-				WSACleanup();
-				return 1;
-			}
 			return 0;
 		}
 		int receiveData() {
-			char recvbuf[DEFAULT_BUFLEN];
+			char recvbuf[MAX_BUFFER];
 			int iResult = 0;
 			// Receive data until the server closes the connection
-			do {
+			
 				iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
 				if (iResult > 0)
-					printf("Bytes sent: %d\n", iResult);
+					printf("Bytes Received: %d\n", iResult);
 				else if (iResult == 0) {
 					printf("Connection closed\n");
 					return 0;
@@ -123,24 +121,90 @@ class Client {
 					printf("recv failed: %d\n", WSAGetLastError());
 					return 1;
 				}
-			} while (iResult > 0);
+			 //while (iResult > 0);
 			return 0;
 		}
-		int sendFile() {
-			//C:\Users\simon\Desktop\New Text Document (3).txt
-			FILE* File;
-			char* Buffer;
-			unsigned long Size;
-			File = fopen("C:\\Users\\simon\\Desktop\\New Text Document (3).txt", "rb");
-			if (!File)
-			{
-				printf("Error while readaing the file\n");
+		int receiveACK() {
+			char recvbuf[1];
+			int iResult = 0;
+			// Receive data until the server closes the connection
+
+			iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
+			if (iResult > 0)
+				printf("ACK Received: %d\n", iResult);
+			else if (iResult == 0) {
+				printf("Connection closed\n");
+				return 0;
+			}
+			else {
+				printf("recv failed: %d\n", WSAGetLastError());
+				return 1;
+			}
+			//while (iResult > 0);
+			return 0;
+		}
+		
+		int sendLong(long value) {
+			std::cout << "sending long\n";
+			value = htonl(value);
+			if (sendData(&value, sizeof(value)) == 1) {
+				printf("sending long failed\n");
 				return 1;
 			}
 
-			fclose(File);
 			return 0;
 		}
+		int sendFile() {
+			
+			std::string filePath;
+			std::cout << "Enter File path (dont use spaces): ";
+			std::cin >> filePath;
+
+			std::string fileName;
+			std::cout << "Enter File name (dont use spaces): ";
+			std::cin >> fileName;
+
+			//filll buffer with file name
+			char* sendbuf = new char[MAX_BUFFER];
+			for (int i = 0; i < fileName.size(); i++) {
+				sendbuf[i] = fileName[i];
+			}
+			//  send file name length
+			sendbuf[fileName.size() + 1] = (const char)"\0";
+			if (sendLong(fileName.size() + 1) == 1) {
+				return 1;
+			}
+			// send file name
+			if (sendData(sendbuf, fileName.size()+1) == 1) {
+				return 1;
+			}
+			u_int64 fileSize = getFileSize(filePath);
+			std::cout << "file size is: " << fileSize << "\n";
+			if (sendData(&fileSize, 8) == 1) {
+				printf("failed to send file sizez\n");
+				return 1;
+			}
+			std::fstream fp(filePath, std::ios::in | std::ios::binary);
+
+			char* fileBuffer = new char[MAX_BUFFER];
+			while (fp.read(fileBuffer, MAX_BUFFER) || fp.gcount() > 0) {
+				size_t bytesRead = fp.gcount();
+				if (sendData(fileBuffer, bytesRead) == 1) {
+					return 1;
+				}
+			}
+			std::cout << "finished sending file\n";
+			fp.close();
+			delete[] fileBuffer;
+			delete[] sendbuf;
+			return 0;
+		}
+		u_int64 getFileSize(std::string filePath) {
+			std::filesystem::path p{ filePath };
+			u_int64 size = std::filesystem::file_size(p);
+			return size;
+		}
+
 		public:
 			Client() :result(NULL), ptr(NULL), ConnectSocket(INVALID_SOCKET), recvbuflen(DEFAULT_BUFLEN) {
 				ZeroMemory(&hints, sizeof(hints));
@@ -151,8 +215,7 @@ class Client {
 			void startClient() {
 				this->createSocket();
 				this->conSocket();
-				this->sendData();
-				this->receiveData();
+				this->sendFile();
 				this->disconnectSocket();
 			}
 };
@@ -256,7 +319,8 @@ class Server {
 					printf("Bytes received: %d\n", iResult);
 
 					// Echo the buffer back to the sender
-					iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+					//iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+					int iSendResult{};
 					if (iSendResult == SOCKET_ERROR) {
 						printf("send failed: %d\n", WSAGetLastError());
 						closesocket(ClientSocket);
@@ -276,6 +340,90 @@ class Server {
 
 			} while (iResult > 0);
 		}
+		int readData(void* buf, int buflen) {
+			char* pBuf = (char*)buf;
+
+			while (buflen > 0) {
+				int iResult = recv(ClientSocket, pBuf, buflen, 0);
+				
+				if (iResult < 0) {
+					printf("receive failed: %d\n", WSAGetLastError());
+					closesocket(ClientSocket);
+					WSACleanup();
+					return 1;
+				}
+				std::cout << "Received " << buflen << " Bytes\n";
+				if (sendACK() == 1) {
+					return 1;
+				}
+				pBuf += iResult;
+				buflen -= iResult;
+			}
+			return 0;
+
+		}
+		int readLong(long* value) {
+			if (readData(value, sizeof(long))) {
+				printf("reading long failed\n");
+				return 1;
+			}
+			*value = ntohl(*value);
+			return 0;
+		}
+		int readFile() {
+			long fileNameSize{};
+			char* receivebuf = new char[DEFAULT_BUFLEN];
+			u_int64 fileSize{};
+
+			// receive length of file name
+			if (readLong(&fileNameSize) == 1) {
+				return 1;
+			}
+			// receive file name
+			std::cout << "File name size is: " << fileNameSize << "\n";
+			if (readData(receivebuf, fileNameSize) == 1) {
+				return 1;
+			}
+			if (readData(&fileSize, 8) == 1) {
+				printf("failed reading filesize\n");
+				return 1;
+			}
+			
+			// create file name string
+			std::string fileName(receivebuf, fileNameSize - 1);
+			std::cout << "File name: " << fileName << "\n";
+			
+			std::fstream fp(fileName.c_str(), std::ios::out | std::ios::binary);
+			if (!fp) {
+				std::cerr << "Error opening file!" << std::endl;
+				return 1;
+			}
+			while (fileSize > 0) {
+				u_int64 min = min(fileSize, MAX_BUFFER);
+				if (readData(receivebuf, min) == 1) {
+					return 1;
+				}
+				fileSize -= min;
+				fp.write(receivebuf, min);
+			}
+			
+
+			fp.close();
+			delete[] receivebuf;
+			return 0;
+		}
+		int sendACK() {
+			char buf[1];
+			buf[0] = 1;
+			int iResult = send(ClientSocket, buf, 1, 0);
+			if (iResult < 0) {
+				printf("sending ACK failed: %d\n", WSAGetLastError());
+				closesocket(ClientSocket);
+				WSACleanup();
+				return 1;
+			}
+			return 0;
+		}
 	public:
 		Server() :result(NULL), ptr(NULL), ListenSocket(INVALID_SOCKET), ClientSocket(INVALID_SOCKET) {
 			ZeroMemory(&hints, sizeof(hints));
@@ -289,7 +437,7 @@ class Server {
 			this->bindSocket();
 			this->listenSocket();
 			this->acceptConnection();
-			this->receiveData();
+			this->readFile();
 			this->disconnectSocket();
 		}
 };
@@ -307,7 +455,7 @@ int main(int argc, char* argv[]) {
 		std::cout <<"WSAStartup failed:" << iResult << "\n";
 		return 1;
 	}
-
+	
 	std::string userInput;
 	std::cout << "For Server enter 0; Client 1\n";
 	std::cin >> userInput;
