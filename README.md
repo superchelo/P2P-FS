@@ -2,7 +2,7 @@
 
 simple peer 2 peer windows app that lets you transfer files between two windows computers on the same network
 
-Server and client PCs must have windows network discoverability turned on for program to work.
+Server and client PCs must have windows network discoverability & file and printer sharing turned on for program to work.
 
 computer that is sending the file(s) is the client\
 computer that is receiving the file(s) is the server
