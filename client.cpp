@@ -9,7 +9,7 @@ Client::Client() : result(NULL), ptr(NULL), ConnectSocket(INVALID_SOCKET), recvb
 
 int Client::createSocket() {
     std::string userInput;
-    std::cout << "Enter Server Address:\n";
+    std::cout << "Enter Server Address: ";
     std::cin >> userInput;
     const char* ipadd = userInput.c_str();
 
@@ -33,7 +33,7 @@ int Client::createSocket() {
 }
 
 int Client::conSocket() {
-    int iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+    int iResult = connect(ConnectSocket, ptr->ai_addr, static_cast<int>(ptr->ai_addrlen));
     if (iResult == SOCKET_ERROR) {
         closesocket(ConnectSocket);
         ConnectSocket = INVALID_SOCKET;
@@ -61,7 +61,7 @@ int Client::disconnectSocket() {
 }
 
 int Client::sendData(void* buf, int buflen) {
-    const char* sendbuf = (const char*)buf;
+    char* sendbuf = static_cast<char*>(buf);
 
     while (buflen > 0) {
         int iResult = send(ConnectSocket, sendbuf, buflen, 0);
@@ -83,6 +83,7 @@ int Client::sendData(void* buf, int buflen) {
     return 0;
 }
 
+//not used
 int Client::receiveData() {
     char recvbuf[MAX_BUFFER];
     int iResult = recv(ConnectSocket, recvbuf, recvbuflen, 0);
@@ -129,13 +130,18 @@ int Client::sendLong(long value) {
 }
 
 int Client::sendFile() {
+
     std::string filePath;
     std::cout << "Enter File path (dont use spaces): ";
     std::cin >> filePath;
+    while (!std::filesystem::exists(filePath)) {
+        std::cout << "File Path does not exist\nEnter File path (dont use spaces): ";
+        std::cin >> filePath;
+    }
 
-    std::string fileName;
-    std::cout << "Enter File name (dont use spaces): ";
-    std::cin >> fileName;
+    std::string fileName = std::filesystem::path(filePath).filename().string();
+    std::cout << fileName <<"\n";
+    //std::cin >> fileName;
 
     char* sendbuf = new char[MAX_BUFFER];
     for (size_t i = 0; i < fileName.size(); i++) {

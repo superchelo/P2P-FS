@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <stdint.h>
 #include <ctime>
+#include <thread>
+
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -27,19 +29,21 @@ class Server {
 private:
     struct addrinfo* result, * ptr, hints;
     SOCKET ListenSocket;
-    SOCKET ClientSocket;
+    //SOCKET ClientSocket;
+    std::vector<std::thread> threads;
 
     int createSocket();
     int bindSocket();
     int listenSocket();
     int acceptConnection();
-    int disconnectSocket();
-    int receiveData();
-    int readData(void* buf, int buflen);
-    int readLong(long* value);
-    int readFile();
-    int sendACK();
-
+    int disconnectSocket(SOCKET* ClientSocket);
+    int receiveData(SOCKET* ClientSocket);
+    int readData(void* buf, int buflen, SOCKET* ClientSocket);
+    int readLong(long* value, SOCKET* ClientSocket);
+    int readFile(SOCKET* ClientSocket);
+    int sendACK(SOCKET* ClientSocket);
+    void joinThreads();
+    void downloadThread(SOCKET* ClientSocket);
 public:
     Server();
     void startServer();
