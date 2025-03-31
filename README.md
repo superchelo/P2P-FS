@@ -9,3 +9,9 @@ computer that is receiving the file(s) is the server
 
 Must link lws2_32 and use c++17 or above when compiling\
 g++ -std=c++17 -o main.exe main.cpp server.cpp client.cpp -lws2_32
+
+or use cmake
+
+cmake -B build
+cd build
+cmake --build .
