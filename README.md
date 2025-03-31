@@ -12,6 +12,6 @@ g++ -std=c++17 -o main.exe main.cpp server.cpp client.cpp -lws2_32
 
 or use cmake
 
-cmake -B build
-cd build
+cmake -B build\
+cd build\
 cmake --build .
