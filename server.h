@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <ctime>
 #include <thread>
-
+#include <vector>
 
 #pragma comment(lib, "Ws2_32.lib")
 

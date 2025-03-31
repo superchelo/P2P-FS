@@ -54,7 +54,7 @@ int Server::listenSocket() {
 
 int Server::acceptConnection() {
 
-    while (threads.size() < 3) {
+    while (true) {
         SOCKET ClientSocket = accept(ListenSocket, NULL, NULL);
         if (ClientSocket == INVALID_SOCKET) {
             printf("accept failed: %d\n", WSAGetLastError());
